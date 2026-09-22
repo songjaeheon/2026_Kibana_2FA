@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ELASTIC_PASSWORD=elastic_admin_password
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=false
+      - xpack.license.self_generated.type=trial   # trial 계정 (basic 계정은 audit log 설정 불가능하여 trial 설정)
+      - xpack.security.audit.enabled=true  # Audit 로깅 활성화
+    ports:
+      - "9200:9200"
+    networks:
+      - elk-net
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: kibana
+    restart: on-failure  # ES 부팅 지연 시 자동 재시작
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system             # 8.x 보안 정책 반영 (내부 통신용 계정)
+      - ELASTICSEARCH_PASSWORD=kibana_system_password    # 내부 통신용 계정 비밀번호
+      - ELASTICSEARCH_REQUESTHEADERSWHITELIST=["authorization","x-opaque-id"] # X-Opaque-Id 헤더 통과 허용
+    depends_on:
+      - elasticsearch
+    networks:
+      - elk-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./.htpasswd:/etc/nginx/.htpasswd
+    depends_on:
+      - kibana
+    networks:
+      - elk-net
+
+networks:
+  elk-net:
+    driver: bridge
